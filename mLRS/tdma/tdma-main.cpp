@@ -33,6 +33,12 @@
 #define UARTB_BAUD                  115200
 #include "../modules/stm32ll-lib/src/stdstm32-uartb.h"
 
+// USB-C CDC (virtual COM port), the primary log output; USB IRQ priority is 0 (usbd_conf.h)
+#ifndef STDSTM32_USE_USB
+  #error build with tools/run_make_tdma.py, it sets STDSTM32_USE_USB !
+#endif
+#include "../modules/stm32-usb-device/stdstm32-usb-vcp.h"
+
 #include "config.h"
 #include "dbg.h"
 #include "radio.h"
@@ -258,9 +264,10 @@ void main_loop(void)
     fan_init(); // fan off; it only runs at >= 27 dBm in mLRS
     dbg_init();
     uartb_init();
+    usb_init();
 
     led_red_on();
-    delay_ms(100);
+    delay_ms(1500); // give the host time to enumerate the USB port, so the header lines are not lost
 
     dbg_log("# swarm-c2 tdma prereq, role %s, node %u",
             (TDMA_ROLE == TDMA_ROLE_GROUND) ? "ground" : "drone", TDMA_NODE_ID);

@@ -35,7 +35,7 @@ All four nodes are joined by cable through attenuators and a 4-way splitter, so 
 
 **Other equipment:**
 
-- USB–UART adapter per node on TX1/RX1 (debug log in these phases), with grounds shared.
+- Each node plugged into the laptop by USB-C: the log arrives as a USB CDC port (`/dev/ttyACM*`) and USB powers the board. Use powered USB ports or a powered hub: at 24 dBm a node can draw several hundred mA. The same log is on TX1/RX1 (115200) if a USB–UART adapter is preferred.
 - 8-channel logic analyser on each node's debug pin (see next section) plus one channel spare for a GPS PPS reference.
 - No SDR or VNA in these phases. Instead, each node drives a TX-window pin, LR1 (PA3), high while its PA is switched to transmit (set with SX\_TX\_EN, cleared at TxDone or when switching to receive). Four debug pins plus four TX-window pins use all 8 logic-analyser channels, so there is no GPS PPS channel. The radios' own RSSI stands in for a VNA when checking the RF rig.
 - Bench supply at 5 V, able to deliver about 1 A per node (Matek quotes 850 mA peak at 30 dBm).
@@ -268,3 +268,4 @@ Still open:
 - [ ] Measured output at the 24 dBm setting; needs a power meter or spectrum analyser.
 - [ ] Does the bench supply hold 5 V for four nodes transmitting in sequence?
 - [ ] Band-edge emissions and actual output power are unverified without an SDR or spectrum analyser. Borrow one, or add a low-cost RF log-detector board on a spare attenuator tap, before any over-the-air test.
+- [ ] USB interrupt priority: the mLRS USB device code runs its interrupt at priority 0 (highest, set in usbd\_conf.h). Before Phase 2 scheduled transmit, either lower it below TIM2 or confirm on the logic analyser that SetTx jitter stays under 20 µs with USB logging active (needs approval to change).

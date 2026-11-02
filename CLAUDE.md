@@ -18,11 +18,12 @@ Spec: docs/phases-2-4.md. Work only on the phase and task named in the session.
 
 ## Build and flash
 - One-time setup: `git submodule update --init --recursive`, then `python3 tools/run_copy_st_drivers.py -silent`. Needs `arm-none-eabi-gcc` on PATH.
-- Build: `python3 tools/run_make_tdma.py --role ground` or `--role drone --node N` (`--all` builds ground + drones 1-3; `--power` 17..24 dBm, default 17). Output: `tools/build/firmware/tdma-*.hex`.
-- The build uses the target `rx-matek-mr900-30-g431kb` (Core, HAL, linker script) and compiles only the mLRS HAL, sx12xx-lib SX126x driver, stm32ll-lib and `mLRS/tdma/`; no mLRS link logic.
-- Flash by DFU: hold the button while connecting USB, then STM32CubeProgrammer (USB) erase + program the .hex. Role and node ID are compile-time defines: TDMA_ROLE, TDMA_NODE_ID.
+- Build: `python3 tools/run_make_tdma.py --role ground` or `--role drone --node N` (`--all` builds ground + drones 1-3; `--power` 17..24 dBm, default 17). Output: `tools/build/firmware/tdma-*.hex` and `.bin`.
+- The build takes Core, clocks, ST drivers and the USB device library from `tx-matek-mr900-30-g431kb` (same board, USB-C enabled) and the pin hal from `rx-hal-matek-mr900-30-g431kb.h`. It compiles only the mLRS HAL, sx12xx-lib SX126x driver, stm32ll-lib, the USB CDC device and `mLRS/tdma/`; no mLRS link logic.
+- Flash by DFU: hold the button while connecting USB, then STM32CubeProgrammer (USB) erase + program the .hex, or `dfu-util -a 0 -s 0x08000000:leave -D <file>.bin`. Role and node ID are compile-time defines: TDMA_ROLE, TDMA_NODE_ID.
 
 ## Pins (mR900-30, from the mLRS hal)
 - SX1262: SPI1 (PA5/6/7), NSS PA4, DIO1 PA15, BUSY PB5, RESET PB6, TX_EN PB7, RX_EN PB0.
-- TX1/RX1 (PA9/PA10): CSV log, 115200 8N1. TX2 (PB3): debug pulses. LR1 (PA3): TX-window pin.
+- USB-C (PA11/PA12): CSV log as a USB CDC port (/dev/ttyACM*), also powers the board. USB IRQ priority is 0 in usbd_conf.h (highest); review before Phase 2 scheduled TX.
+- TX1/RX1 (PA9/PA10): same CSV log, 115200 8N1 (optional). TX2 (PB3): debug pulses. LR1 (PA3): TX-window pin.
 - LEDs: green PA1, red PA0. Button PB8. Fan PA8 (off).

@@ -7,7 +7,9 @@
 // Pins (see docs/phases-2-4.md, Firmware structure and conventions):
 //   TX2 (PB3)  debug pin, pulse width identifies the event
 //   LR1 (PA3)  TX-window pin, high while the amp is switched to transmit
-//   TX1 (PA9)  UART1 115200 8N1, line-based CSV log
+//   USB-C      CDC virtual COM port (/dev/ttyACM*), line-based CSV log
+//   TX1 (PA9)  UART1 115200 8N1, same log (optional, for a USB-UART adapter)
+// USB output is non-blocking: lines are dropped if no host reads them.
 //*******************************************************
 #ifndef TDMA_DBG_H
 #define TDMA_DBG_H
@@ -56,6 +58,7 @@ void dbg_log(const char* fmt, ...)
     if (n < 0) return;
     if (n > (int)sizeof(buf) - 2) n = sizeof(buf) - 2;
     buf[n++] = '\n';
+    usb_putbuf((uint8_t*)buf, n);
     uartb_putbuf((uint8_t*)buf, n);
 }
 
