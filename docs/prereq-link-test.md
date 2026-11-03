@@ -1,5 +1,7 @@
 # Prerequisite link test (phases 0–1)
 
+Result (2026-11-03): passed. Bench run 123/123 pings answered on USB power; walk test with antennas showed SNR ~+11.5 dB everywhere in the house, misses attributed to the battery bank switching off. This ping/pong firmware was replaced by the Phase 2 timing test after commit 4c367e3.
+
 Firmware: `mLRS/tdma/tdma-main.cpp`, built with `tools/run_make_tdma.py`.
 
 Two units, both plugged into a Linux laptop by USB-C, exchange fixed 30-byte packets at 869.525 MHz, SF8, 250 kHz, CR 4/5, explicit header, CRC on, 17 dBm by default.
@@ -41,7 +43,7 @@ python3 tools/run_make_tdma.py --role drone --node 1
    Ground lines start with `pong`/`timeout`, drone lines with `ping`. Your user needs to be in the `dialout` group. If ModemManager is running it may probe the ports for a few seconds after plug-in; stop it (`sudo systemctl stop ModemManager`) if lines go missing.
 5. Red LED goes off once the radio is configured.
 6. Run for 10 minutes (600 pings).
-7. Pass: ≥ 99% of pings answered (`pong` lines on A), RSSI about −53 dBm at 17 dBm through ~70 dB loss, SNR positive, no `tx_fail`.
+7. Pass: ≥ 99% of pings answered (`pong` lines on A), logged RSSI about −37 dBm at 17 dBm through ~70 dB loss (−53 dBm at the antenna port plus the SE2435L's ~16 dB LNA gain, which the SX1262 RSSI does not remove), SNR positive, no `tx_fail`. RSSI pinned at −1 means the receiver is saturated: too little loss between the units.
 
 LEDs: green toggles per good packet; red on = no link (drone: no ping for 3 s; ground: last pong timed out); fast red blink = SX1262 not responding.
 
