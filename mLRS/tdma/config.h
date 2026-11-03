@@ -73,14 +73,22 @@ static_assert(TDMA_TX_POWER_DBM <= TDMA_TX_POWER_DBM_MAX, "TDMA_TX_POWER_DBM abo
 #define T_TX_LATENCY_US         0            // SetTx command -> RF on air
 
 
-//-- prerequisite link test (ping/pong), replaced by the TDMA frame in Phase 3
+//-- Phase 2 timing test (tasks 2.1-2.4), replaced by the TDMA frame in Phase 3
 
-#define TDMA_PING_PERIOD_MS     1000         // ground sends one ping per second
-#define TDMA_PING_LEN           30           // same size as a Phase 3 slot packet
-#define TDMA_PONG_TIMEOUT_MS    200          // ground waits this long for the pong
+#define TDMA_TEST_PERIOD_US     1000000UL    // ground transmits on this exact TIM2 grid
+#define TDMA_TEST_LEN           30           // same size as a Phase 3 slot packet
+#define TDMA_TEST_ARM_LEAD_US   30000UL      // load the packet this long before its on-air time
 
-// one 30-byte packet is ~61.7 ms on air; one per second is ~6.2% duty per node
-static_assert(TDMA_PING_PERIOD_MS >= 700, "ping period too short for the 10% duty limit");
+// one 30-byte packet is ~61.7 ms on air: ~6.2% duty at 1 s.
+// (Task 2.5 in the spec says every 500 ms: that is ~12.4%, over the 10% limit.)
+static_assert(TDMA_TEST_PERIOD_US >= 700000UL, "test period too short for the 10% duty limit");
+
+
+#define TIM2_IRQ_PRIORITY       1            // timebase, DIO1 capture, scheduled SetTx
+#define SX_DIO_EXTI_IRQ_PRIORITY 1           // hal's EXTI helper, unused (EXTI fallback sets its own, = TIM2)
+#define UARTB_IRQ_PRIORITY      11           // TX1/RX1 log
+// USB: USBD_IRQ_PRIORITY = 14, set on the command line by tools/run_make_tdma.py
+// SysTick: 15
 
 
 #endif // TDMA_CONFIG_H

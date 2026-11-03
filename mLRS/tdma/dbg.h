@@ -35,13 +35,7 @@ void dbg_init(void)
     gpio_init(DBG_TXWINDOW_PIN, IO_MODE_OUTPUT_PP_LOW, IO_SPEED_VERYFAST);
 }
 
-// blocking; replaced by timer output compare in Phase 2
-void dbg_pulse(uint16_t width_us)
-{
-    gpio_high(DBG_PIN);
-    delay_us(width_us);
-    gpio_low(DBG_PIN);
-}
+// pulses: dbg_pulse_start(width_us) in timebase.h, non-blocking, ended by TIM2 CH4
 
 void dbg_txwindow_high(void) { gpio_high(DBG_TXWINDOW_PIN); }
 void dbg_txwindow_low(void) { gpio_low(DBG_TXWINDOW_PIN); }

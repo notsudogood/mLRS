@@ -6,6 +6,13 @@
 //*******************************************************
 // Keeps the mLRS hardware layer (hal, SPI, amp switching, TCXO setup)
 // and uses none of the mLRS link logic.
+//
+// Timestamps (TIM2 us, see timebase.h), taken in the TIM2 interrupt:
+//   radio_t_hdrvalid  DIO1 rising edge of the first IRQ of a received packet (HeaderValid)
+//   radio_t_settx     instant SetTx was issued by a scheduled transmit
+//   radio_t_txdone    DIO1 rising edge of TxDone
+// SPI rule: while a transmit is armed (RADIO_TX_ARMED) the TIM2 interrupt
+// owns the SPI bus; the main loop must not call any radio function.
 //*******************************************************
 #ifndef TDMA_RADIO_H
 #define TDMA_RADIO_H
@@ -23,6 +30,23 @@ typedef struct {
     uint8_t len;
     bool crc_ok;
 } tRadioRxStatus;
+
+
+typedef enum {
+    RADIO_IDLE = 0,
+    RADIO_RX,
+    RADIO_TX_ARMED,     // TxAt() done, SetTx pending in tb_at()
+    RADIO_TX_ON,        // SetTx issued, waiting for TxDone
+} RADIO_STATE_ENUM;
+
+volatile uint8_t radio_state = RADIO_IDLE;
+volatile bool radio_hdr_seen = false;
+volatile uint32_t radio_t_hdrvalid = 0;
+volatile uint32_t radio_t_settx = 0;
+volatile uint32_t radio_t_txdone = 0;
+volatile uint32_t radio_dio_edges = 0;
+
+void radio_settx_isr(void); // below the class
 
 
 class tRadio : public Sx126xDriverBase
@@ -132,14 +156,35 @@ class tRadio : public Sx126xDriverBase
 
     //-- TX / RX
 
-    void Send(uint8_t* data, uint8_t len)
+    // Scheduled transmit (task 2.4): puts the radio in STDBY_XOSC with the
+    // packet loaded now, then the TIM2 interrupt issues SetTx at
+    // t_on_air - T_TX_LATENCY_US. Returns false and transmits nothing if that
+    // time is too close or already past.
+    bool TxAt(uint32_t t_on_air, uint8_t* data, uint8_t len)
     {
+        if (radio_state == RADIO_TX_ARMED || radio_state == RADIO_TX_ON) return false;
+        SetStandby(SX126X_STDBY_CONFIG_STDBY_XOSC); // TCXO stays on: SetTx starts without the TCXO delay
         SetPacketParams(TDMA_PREAMBLE_SYMS, SX126X_LORA_HEADER_EXPLICIT, len, SX126X_LORA_CRC_ENABLE, SX126X_LORA_IQ_NORMAL);
         WriteBuffer(0, data, len);
         ClearIrqStatus(SX126X_IRQ_ALL);
-        sx_amp_transmit();
-        dbg_txwindow_high();
-        SetTx(0); // no timeout; TxDone ends it
+        radio_hdr_seen = false;
+        radio_state = RADIO_TX_ARMED;
+        if (!tb_at(t_on_air - T_TX_LATENCY_US, radio_settx_isr)) {
+            radio_state = RADIO_IDLE;
+            Idle();
+            return false;
+        }
+        return true;
+    }
+
+    // Aborts a TX that did not end (no TxDone): amp back to receive, radio to FS.
+    void AbortTx(void)
+    {
+        tb_at_cancel();
+        radio_state = RADIO_IDLE;
+        Idle();
+        sx_amp_receive();
+        dbg_txwindow_low();
     }
 
     // tmo_ms = 0: continuous RX
@@ -147,14 +192,23 @@ class tRadio : public Sx126xDriverBase
     {
         SetPacketParams(TDMA_PREAMBLE_SYMS, SX126X_LORA_HEADER_EXPLICIT, 255, SX126X_LORA_CRC_ENABLE, SX126X_LORA_IQ_NORMAL);
         ClearIrqStatus(SX126X_IRQ_ALL);
+        radio_hdr_seen = false;
+        radio_state = RADIO_RX;
         sx_amp_receive();
         SetRx((tmo_ms == 0) ? 0xFFFFFF : (uint32_t)tmo_ms * 64); // 15.625 us steps; 0xFFFFFF = continuous
+    }
+
+    // ready for the next packet in continuous RX: next DIO1 edge is a new HeaderValid
+    void RxRearm(void)
+    {
+        radio_hdr_seen = false;
     }
 
     void Idle(void)
     {
         SetFs();
         ClearIrqStatus(SX126X_IRQ_ALL);
+        if (radio_state != RADIO_TX_ARMED) radio_state = RADIO_IDLE;
     }
 
     // DIO1 level, polled
@@ -170,6 +224,7 @@ class tRadio : public Sx126xDriverBase
         if (irq & SX126X_IRQ_TX_DONE) {
             dbg_txwindow_low();
             sx_amp_receive(); // amp off TX as soon as the packet is out
+            radio_state = RADIO_IDLE;
         }
         return irq;
     }
@@ -197,6 +252,38 @@ class tRadio : public Sx126xDriverBase
   private:
     int8_t actual_power_dbm;
 };
+
+
+extern tRadio radio;
+
+
+// TIM2 interrupt, at t_on_air - T_TX_LATENCY_US (task 2.4)
+void radio_settx_isr(void)
+{
+    if (radio_state != RADIO_TX_ARMED) return;
+    sx_amp_transmit();
+    dbg_txwindow_high();
+    radio_state = RADIO_TX_ON;
+    radio_t_settx = TIM2->CNT;
+    dbg_pulse_start(DBG_PULSE_SETTX); // rising edge marks the start of the SetTx command
+    radio.SetTx(0); // no timeout; TxDone ends it
+}
+
+
+// TIM2 interrupt, DIO1 rising edge (task 2.3)
+void radio_dio1_isr(uint32_t t)
+{
+    radio_dio_edges++;
+    if (radio_state == RADIO_TX_ON) {
+        radio_t_txdone = t;
+        dbg_pulse_start(DBG_PULSE_TXDONE);
+    } else
+    if (radio_state == RADIO_RX && !radio_hdr_seen) { // first IRQ of a packet is HeaderValid
+        radio_hdr_seen = true;
+        radio_t_hdrvalid = t;
+        dbg_pulse_start(DBG_PULSE_HDRVALID);
+    }
+}
 
 
 #endif // TDMA_RADIO_H

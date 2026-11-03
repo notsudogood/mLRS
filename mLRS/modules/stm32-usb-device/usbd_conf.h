@@ -36,7 +36,9 @@ extern "C" {
 #define USB_RXBUFSIZE       512
 #define USB_TXBUFSIZE       512
 #endif
+#ifndef USBD_IRQ_PRIORITY // TDMA build overrides this from the command line (tools/run_make_tdma.py)
 #define USBD_IRQ_PRIORITY   0
+#endif
 
 
 #include <stdlib.h>

@@ -69,16 +69,20 @@ def git_hash():
         return 'nogit'
 
 
-def build(role, node, power):
+def build(role, node, power, dio1_exti=False):
     name = 'tdma-' + role + '-n' + str(node)
     defines = [
         'STDSTM32_USE_USB',
+        'USBD_IRQ_PRIORITY=14', # below TIM2 (1): USB must not delay scheduled SetTx
         'TDMA_ROLE=TDMA_ROLE_' + role.upper(),
         'TDMA_NODE_ID=' + str(node),
         ]
     if power is not None:
         defines.append('TDMA_TX_POWER_DBM=' + str(power))
         name += '-p' + str(power)
+    if dio1_exti:
+        defines.append('TDMA_DIO1_USE_EXTI')
+        name += '-exti'
 
     target = mk.cTargetG431KB(TARGET, TARGET_D_CORE, defines, name, name + '-' + git_hash(), '')
     target.target_D = TARGET_D
@@ -124,6 +128,7 @@ if __name__ == "__main__":
     ap.add_argument('--node', type=int, default=None, help='node ID, 0 for ground, 1..20 for drones')
     ap.add_argument('--power', type=int, default=None, help='TX power in dBm (default 17, max %d)' % POWER_MAX_DBM)
     ap.add_argument('--all', action='store_true', help='build ground + drones 1, 2, 3')
+    ap.add_argument('--dio1-exti', action='store_true', help='timestamp DIO1 with EXTI instead of TIM2 input capture (fallback)')
     args = ap.parse_args()
 
     if args.power is not None and args.power > POWER_MAX_DBM:
@@ -145,5 +150,5 @@ if __name__ == "__main__":
         ap.print_help()
         sys.exit(1)
 
-    ok = all([build(role, node, args.power) for role, node in jobs])
+    ok = all([build(role, node, args.power, args.dio1_exti) for role, node in jobs])
     sys.exit(0 if ok else 1)

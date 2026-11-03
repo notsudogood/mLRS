@@ -16,6 +16,9 @@ Spec: docs/phases-2-4.md. Work only on the phase and task named in the session.
 - Every task ends with: build passes, a short test procedure, and a CSV log format.
 - Ask before changing pin assignments, clock config or interrupt priorities.
 
+## Test docs
+- docs/prereq-link-test.md (done), docs/phase2-timing-test.md (tasks 2.1-2.4); `python3 tools/tdma_phase2_stats.py ground.csv drone.csv`.
+
 ## Build and flash
 - One-time setup: `git submodule update --init --recursive`, then `python3 tools/run_copy_st_drivers.py -silent`. Needs `arm-none-eabi-gcc` on PATH.
 - Build: `python3 tools/run_make_tdma.py --role ground` or `--role drone --node N` (`--all` builds ground + drones 1-3; `--power` 17..24 dBm, default 17). Output: `tools/build/firmware/tdma-*.hex` and `.bin`.
@@ -24,6 +27,8 @@ Spec: docs/phases-2-4.md. Work only on the phase and task named in the session.
 
 ## Pins (mR900-30, from the mLRS hal)
 - SX1262: SPI1 (PA5/6/7), NSS PA4, DIO1 PA15, BUSY PB5, RESET PB6, TX_EN PB7, RX_EN PB0.
-- USB-C (PA11/PA12): CSV log as a USB CDC port (/dev/ttyACM*), also powers the board. USB IRQ priority is 0 in usbd_conf.h (highest); review before Phase 2 scheduled TX.
+- USB-C (PA11/PA12): CSV log as a USB CDC port (/dev/ttyACM*), also powers the board.
+- DIO1 PA15 = TIM2_CH1 input capture (timebase.h); `--dio1-exti` falls back to EXTI15.
+- Interrupt priorities: TIM2 1, UART1 11, USB 14 (USBD_IRQ_PRIORITY set by run_make_tdma.py; stock mLRS keeps 0), SysTick 15.
 - TX1/RX1 (PA9/PA10): same CSV log, 115200 8N1 (optional). TX2 (PB3): debug pulses. LR1 (PA3): TX-window pin.
 - LEDs: green PA1, red PA0. Button PB8. Fan PA8 (off).
