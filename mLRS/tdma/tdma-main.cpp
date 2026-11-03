@@ -46,6 +46,8 @@
 
 tRadio radio;
 
+uint32_t cnt_tx = 0, cnt_rx_ok = 0, cnt_rx_err = 0; // reported by heartbeat()
+
 
 //-------------------------------------------------------
 // Packet
@@ -124,11 +126,28 @@ bool send_blocking(tPingPacket* pkt)
 {
     radio.Send((uint8_t*)pkt, sizeof(tPingPacket));
     dbg_pulse(DBG_PULSE_SETTX);
+    cnt_tx++;
     if (wait_irq(SX126X_IRQ_TX_DONE, 150)) return true; // ~62 ms airtime
     radio.Idle();
     sx_amp_receive();
     dbg_txwindow_low();
     return false;
+}
+
+
+// status line every 10 s, so a logger opened late still sees role, node and counters
+#define HEARTBEAT_PERIOD_MS     10000
+
+uint32_t heartbeat_tlast_ms = 0;
+
+void heartbeat(void)
+{
+    uint32_t now = HAL_GetTick();
+    if ((now - heartbeat_tlast_ms) < HEARTBEAT_PERIOD_MS) return;
+    heartbeat_tlast_ms = now;
+    dbg_log("# alive,uptime_s=%lu,role=%s,node=%u,power_dbm=%d,tx=%lu,rx_ok=%lu,rx_err=%lu",
+            now / 1000, (TDMA_ROLE == TDMA_ROLE_GROUND) ? "ground" : "drone", TDMA_NODE_ID,
+            radio.Power_dbm(), cnt_tx, cnt_rx_ok, cnt_rx_err);
 }
 
 
@@ -148,6 +167,7 @@ void loop_main(void)
     dbg_log("# columns: event,seq,node,rssi,snr,remote_rssi,remote_snr,crc_ok");
 
     while (1) {
+        heartbeat();
         if ((HAL_GetTick() - tlast_ms) < TDMA_PING_PERIOD_MS) continue;
         tlast_ms += TDMA_PING_PERIOD_MS;
         seq++;
@@ -172,14 +192,17 @@ void loop_main(void)
         radio.ReadPacket((uint8_t*)&pkt, sizeof(pkt), &st, irq);
         radio.Idle();
         if (!st.crc_ok) {
+            cnt_rx_err++;
             dbg_log("crc_err,%lu,,%d,%d,,,0", seq, st.rssi, st.snr);
             continue;
         }
         if (!pkt_valid(&pkt, st.len, PKT_TYPE_PONG) || pkt.seq != seq) {
+            cnt_rx_err++;
             dbg_log("bad_pkt,%lu,,%d,%d,,,1", seq, st.rssi, st.snr);
             continue;
         }
 
+        cnt_rx_ok++;
         led_red_off();
         led_green_toggle();
         dbg_log("pong,%lu,%u,%d,%d,%d,%d,1", seq, pkt.node_id, st.rssi, st.snr, pkt.remote_rssi, pkt.remote_snr);
@@ -207,6 +230,7 @@ void loop_main(void)
     radio.StartRx(0);
 
     while (1) {
+        heartbeat();
         if ((HAL_GetTick() - tlastrx_ms) > 3 * TDMA_PING_PERIOD_MS) { // no ping for a while
             led_red_on();
             led_green_off();
@@ -217,17 +241,20 @@ void loop_main(void)
 
         radio.ReadPacket((uint8_t*)&pkt, sizeof(pkt), &st, irq);
         if (!st.crc_ok) {
+            cnt_rx_err++;
             dbg_log("crc_err,,,%d,%d,0", st.rssi, st.snr);
             radio.StartRx(0);
             continue;
         }
         if (!pkt_valid(&pkt, st.len, PKT_TYPE_PING)) {
+            cnt_rx_err++;
             dbg_log("bad_pkt,,,%d,%d,1", st.rssi, st.snr);
             radio.StartRx(0);
             continue;
         }
 
         tlastrx_ms = HAL_GetTick();
+        cnt_rx_ok++;
         led_red_off();
         led_green_toggle();
         dbg_log("ping,%lu,%u,%d,%d,1", pkt.seq, pkt.node_id, st.rssi, st.snr);

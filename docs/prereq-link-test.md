@@ -51,6 +51,12 @@ Optional: the logic analyser on TX2 (debug pulses: 20 µs HeaderValid, 40 µs Se
 
 Lines starting with `#` are comments (startup info, column names).
 
+Every 10 s each node also prints a status line, so a logger opened late still identifies the node:
+
+```
+# alive,uptime_s=120,role=drone,node=1,power_dbm=17,tx=0,rx_ok=0,rx_err=0
+```
+
 Ground (A):
 
 | Column | Meaning |
